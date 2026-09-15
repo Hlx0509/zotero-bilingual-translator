@@ -6,7 +6,7 @@
 
 1. 运行 `npm install && npm run package`。
 2. 在 Zotero 中打开“工具 → 插件”，点击齿轮并选择“从文件安装插件”。
-3. 选择 `dist/zotero-bilingual-translator-0.2.0.xpi`。
+3. 选择 `dist/zotero-bilingual-translator-0.2.1.xpi`。
 4. 在“设置 → 双语 PDF 翻译”中填写 DeepSeek API Key。
 
 ## 使用

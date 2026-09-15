@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { chunkParagraphs, normalizeParagraphs } from '../../src/core/chunking.js';
 
 describe('paragraph chunking', () => {
+  it('treats Zotero PDF Worker single newlines as paragraph boundaries', () => {
+    expect(normalizeParagraphs('First paragraph.\nSecond paragraph.')).toEqual([
+      'First paragraph.',
+      'Second paragraph.',
+    ]);
+  });
+
   it('normalizes whitespace without changing paragraph order', () => {
     expect(normalizeParagraphs('  First   line\n\n  Second line  ')).toEqual([
       'First line',

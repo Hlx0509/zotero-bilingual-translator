@@ -2,7 +2,7 @@ import type { TranslationChunk } from './types.js';
 
 export function normalizeParagraphs(raw: string): string[] {
   return raw
-    .split(/\n\s*\n/u)
+    .split(/\n+/u)
     .map((paragraph) => paragraph.replace(/\s+/gu, ' ').trim())
     .filter(Boolean);
 }
