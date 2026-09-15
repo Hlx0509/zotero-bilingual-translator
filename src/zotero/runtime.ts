@@ -1,6 +1,7 @@
 import { DeepSeekClient } from '../core/deepseek.js';
 import { renderBilingualPdf } from '../core/render.js';
-import { translateDocument, type TranslationCache } from '../core/orchestrator.js';
+import type { TranslationCache } from '../core/orchestrator.js';
+import { translatePages } from '../core/page-translation.js';
 import type { TranslationSettings } from '../core/types.js';
 import { generateBilingualAttachment } from './workflow.js';
 
@@ -36,9 +37,15 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         if (!path) throw new Error('找不到 PDF 附件文件。');
         return { id, parentID: item.parentID, contentType: item.attachmentContentType, path, title: item.getDisplayTitle() };
       },
-      async extractText(id) {
+      async extractPageText(id) {
         const extracted = await Zotero.PDFWorker.getFullText(id, null, true);
-        return extracted?.text ?? '';
+        return {
+          text: extracted?.text ?? '',
+          pageChars: Array.isArray(extracted?.pageChars) ? extracted.pageChars : undefined,
+        };
+      },
+      async readSourcePdf(path) {
+        return new Uint8Array(await IOUtils.read(path));
       },
       async readFont() {
         const response = await fetch(`${rootURI}assets/NotoSansSC-VF.ttf`);
@@ -55,24 +62,27 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         await Zotero.Attachments.linkFromFile({ parentItemID, file: path, title, contentType: 'application/pdf' });
       },
     },
-    translate: ({ chunks }) => translateDocument({
-      fingerprint: String(attachmentID), chunks, settings, signal: controller.signal, client, cache: memoryCache,
-      onProgress: ({ completedChunks, totalChunks }) => {
-        indicator.setText(`翻译 ${completedChunks} / ${totalChunks} 段`);
-        indicator.setProgress(Math.round((completedChunks / totalChunks) * 100));
+    translate: ({ pages }) => translatePages({
+      fingerprint: String(attachmentID), pages, settings, signal: controller.signal, client, cache: memoryCache,
+      onProgress: ({ pageNumber, totalPages, completedChunks, totalChunks }) => {
+        const detail = totalChunks ? `${completedChunks} / ${totalChunks} 段` : '无可翻译文本';
+        indicator.setText(`正在翻译第 ${pageNumber} / ${totalPages} 页（${detail}）`);
+        const pageFraction = totalChunks ? completedChunks / totalChunks : 1;
+        indicator.setProgress(Math.round(10 + ((pageNumber - 1 + pageFraction) / totalPages) * 75));
       },
     }),
     render: renderBilingualPdf,
     onProgress: ({ phase }) => {
       const labels = {
-        extracting: '正在提取 PDF 文本',
+        extracting: '正在提取 PDF 分页文本',
         translating: '正在翻译文本',
-        rendering: '正在生成双语 PDF',
+        merging: '正在合并原文页与译文页',
         saving: '正在保存并添加附件',
         complete: '已完成',
       };
       indicator.setText(labels[phase]);
-      if (phase !== 'translating') indicator.setProgress(phase === 'complete' ? 100 : 0);
+      const percentages = { extracting: 5, translating: 10, merging: 90, saving: 96, complete: 100 };
+      indicator.setProgress(percentages[phase]);
     },
   });
     indicator.setText('已完成');

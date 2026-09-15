@@ -1,5 +1,6 @@
-import { chunkParagraphs, normalizeParagraphs } from '../core/chunking.js';
-import type { TranslatedDocument } from '../core/orchestrator.js';
+import type { SourcePage, PDFWorkerTextResult } from '../core/page-text.js';
+import { splitTextByPageChars } from '../core/page-text.js';
+import type { TranslatedPage } from '../core/page-translation.js';
 import type { TranslationSettings } from '../core/types.js';
 import { assertTranslatableAttachment, uniqueOutputPath } from './adapter.js';
 
@@ -13,7 +14,8 @@ export interface WorkflowAttachment {
 
 export interface WorkflowAPI {
   getAttachment(id: number): Promise<WorkflowAttachment>;
-  extractText(attachmentID: number): Promise<string>;
+  extractPageText(attachmentID: number): Promise<PDFWorkerTextResult>;
+  readSourcePdf(path: string): Promise<Uint8Array>;
   readFont(): Promise<Uint8Array>;
   exists(path: string): Promise<boolean>;
   writeAtomically(path: string, bytes: Uint8Array): Promise<void>;
@@ -25,23 +27,27 @@ export interface WorkflowInput {
   api: WorkflowAPI;
   settings: TranslationSettings;
   signal: AbortSignal;
-  onProgress?: (event: { phase: 'extracting' | 'translating' | 'rendering' | 'saving' | 'complete' }) => void;
-  translate(input: { chunks: ReturnType<typeof chunkParagraphs> }): Promise<TranslatedDocument>;
-  render(input: TranslatedDocument & { title: string; cjkFontBytes: Uint8Array }): Promise<Uint8Array>;
+  onProgress?: (event: { phase: 'extracting' | 'translating' | 'merging' | 'saving' | 'complete' }) => void;
+  translate(input: { pages: SourcePage[] }): Promise<{ pages: TranslatedPage[] }>;
+  render(input: { pages: TranslatedPage[]; title: string; sourcePdfBytes: Uint8Array; cjkFontBytes: Uint8Array }): Promise<Uint8Array>;
 }
 
 export async function generateBilingualAttachment(input: WorkflowInput): Promise<string> {
   const attachment = await input.api.getAttachment(input.attachmentID);
   assertTranslatableAttachment(attachment);
   input.onProgress?.({ phase: 'extracting' });
-  const paragraphs = normalizeParagraphs(await input.api.extractText(attachment.id));
-  if (!paragraphs.length) throw new Error('此 PDF 没有可提取的文字；扫描件暂不支持。');
+  const pages = splitTextByPageChars(await input.api.extractPageText(attachment.id));
+  if (!pages.some(page => page.text.trim())) throw new Error('此 PDF 没有可提取的文字；扫描件暂不支持。');
 
   input.onProgress?.({ phase: 'translating' });
-  const translated = await input.translate({ chunks: chunkParagraphs(paragraphs, input.settings.maxChunkCharacters) });
+  const translated = await input.translate({ pages });
   if (input.signal.aborted) throw new Error('翻译已取消。');
-  input.onProgress?.({ phase: 'rendering' });
-  const bytes = await input.render({ ...translated, title: attachment.title, cjkFontBytes: await input.api.readFont() });
+  input.onProgress?.({ phase: 'merging' });
+  const [sourcePdfBytes, cjkFontBytes] = await Promise.all([
+    input.api.readSourcePdf(attachment.path),
+    input.api.readFont(),
+  ]);
+  const bytes = await input.render({ ...translated, title: attachment.title, sourcePdfBytes, cjkFontBytes });
   const outputPath = await uniqueOutputPath(attachment.path, input.api.exists);
   input.onProgress?.({ phase: 'saving' });
   await input.api.writeAtomically(outputPath, bytes);
