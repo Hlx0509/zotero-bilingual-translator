@@ -1,8 +1,8 @@
 {
   "manifest_version": 2,
   "name": "Zotero Bilingual Translator",
-  "version": "0.2.1",
-  "description": "Preserve original PDF pages and insert Chinese translation pages generated with DeepSeek.",
+  "version": "0.3.0",
+  "description": "Preserve original pages and reflow Chinese translations with source images, formulas, and tables.",
   "applications": {
     "zotero": {
       "id": "bilingual-translator@example.com",
