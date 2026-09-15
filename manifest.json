@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero Bilingual Translator",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "Generate a Chinese-English bilingual PDF with DeepSeek.",
   "applications": {
     "zotero": {

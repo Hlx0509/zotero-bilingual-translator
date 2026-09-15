@@ -4,9 +4,9 @@ import { mkdir, rm, copyFile } from 'node:fs/promises';
 
 await import('../esbuild.mjs');
 await mkdir('dist', { recursive: true });
-await rm('dist/zotero-bilingual-translator-0.1.5.xpi', { force: true });
+await rm('dist/zotero-bilingual-translator-0.1.6.xpi', { force: true });
 await new Promise((resolve, reject) => {
-  const output = createWriteStream('dist/zotero-bilingual-translator-0.1.5.xpi');
+  const output = createWriteStream('dist/zotero-bilingual-translator-0.1.6.xpi');
   const archive = archiver('zip', { zlib: { level: 9 } });
   output.on('close', resolve);
   archive.on('error', reject);
@@ -19,4 +19,4 @@ await new Promise((resolve, reject) => {
   archive.finalize();
 });
 await mkdir('../outputs', { recursive: true });
-await copyFile('dist/zotero-bilingual-translator-0.1.5.xpi', '../outputs/zotero-bilingual-translator-0.1.5.xpi');
+await copyFile('dist/zotero-bilingual-translator-0.1.6.xpi', '../outputs/zotero-bilingual-translator-0.1.6.xpi');

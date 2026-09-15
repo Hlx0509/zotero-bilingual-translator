@@ -1,5 +1,5 @@
 import fontkit from '@pdf-lib/fontkit';
-import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { TranslatedDocument } from './orchestrator.js';
 
 export interface RenderInput extends TranslatedDocument {
@@ -10,7 +10,6 @@ export interface RenderInput extends TranslatedDocument {
 export async function renderBilingualPdf(input: RenderInput): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   pdf.registerFontkit(fontkit);
-  const latin = await pdf.embedFont(StandardFonts.Helvetica);
   const cjk = await pdf.embedFont(input.cjkFontBytes, { subset: true });
   let page = pdf.addPage([595.28, 841.89]);
   let y = 787;
@@ -19,7 +18,7 @@ export async function renderBilingualPdf(input: RenderInput): Promise<Uint8Array
 
   for (const chunk of input.chunks) {
     for (let index = 0; index < chunk.paragraphs.length; index += 1) {
-      ({ page, y } = drawWrapped(page, y, chunk.paragraphs[index], latin, rgb(0.12, 0.12, 0.12), 11));
+      ({ page, y } = drawWrapped(page, y, chunk.paragraphs[index], cjk, rgb(0.12, 0.12, 0.12), 11));
       ({ page, y } = drawWrapped(page, y - 6, chunk.translations[index], cjk, rgb(0, 0.28, 0.52), 11));
       y -= 12;
       if (y < 75) {
