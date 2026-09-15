@@ -1,0 +1,7 @@
+node_modules/
+dist/
+compatibility-probe/
+bootstrap.js
+prefs.xhtml
+manifest.compatibility-probe.json
+bootstrap.compatibility-probe.js

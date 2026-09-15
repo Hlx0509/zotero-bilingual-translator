@@ -1,0 +1,14 @@
+{
+  "manifest_version": 2,
+  "name": "Zotero Bilingual Translator",
+  "version": "0.1.3",
+  "description": "Generate a Chinese-English bilingual PDF with DeepSeek.",
+  "applications": {
+    "zotero": {
+      "id": "bilingual-translator@example.com",
+      "update_url": "https://example.com/zotero-bilingual-translator/updates.json",
+      "strict_min_version": "7.9.9",
+      "strict_max_version": "10.9.9"
+    }
+  }
+}
