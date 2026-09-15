@@ -1,6 +1,9 @@
 import fontkit from '@pdf-lib/fontkit';
 import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib';
 import type { TranslatedPage } from './page-translation.js';
+import type { TranslatedLayoutDocument } from './layout-translation.js';
+import type { LayoutWarning } from './layout.js';
+import { choosePageBreak, fitVisualBlock } from './visual-layout.js';
 
 const A4: [number, number] = [595.28, 841.89];
 const MARGIN = 54;
@@ -13,6 +16,120 @@ export interface RenderInput {
   sourcePdfBytes: Uint8Array;
   pages: TranslatedPage[];
   cjkFontBytes: Uint8Array;
+}
+
+export interface StructuredRenderInput extends TranslatedLayoutDocument {
+  title: string;
+  sourcePdfBytes: Uint8Array;
+  cjkFontBytes: Uint8Array;
+}
+
+export interface RenderResult {
+  bytes: Uint8Array;
+  warnings: LayoutWarning[];
+}
+
+export async function renderStructuredBilingualPdf(input: StructuredRenderInput): Promise<RenderResult> {
+  const source = await PDFDocument.load(input.sourcePdfBytes);
+  const output = await PDFDocument.create();
+  output.registerFontkit(fontkit);
+  const cjk = await output.embedFont(input.cjkFontBytes, { subset: true });
+  const warnings = [...input.warnings];
+  const layoutsByPage = new Map(input.pages.map(page => [page.pageNumber, page]));
+
+  for (let sourceIndex = 0; sourceIndex < source.getPageCount(); sourceIndex += 1) {
+    const [copiedPage] = await output.copyPages(source, [sourceIndex]);
+    output.addPage(copiedPage);
+    const layoutPage = layoutsByPage.get(sourceIndex + 1);
+    if (!layoutPage?.blocks.length) continue;
+
+    let continuation = 1;
+    let page = addTranslationPage(output, cjk, input.title, sourceIndex + 1, continuation);
+    let y = 752;
+    const newPage = () => {
+      continuation += 1;
+      page = addTranslationPage(output, cjk, input.title, sourceIndex + 1, continuation);
+      y = 752;
+    };
+
+    for (let blockIndex = 0; blockIndex < layoutPage.blocks.length; blockIndex += 1) {
+      const block = layoutPage.blocks[blockIndex];
+      if (block.type === 'text') {
+        const style = textStyle(block.role);
+        for (const translation of block.translations) {
+          for (const line of wrapText(translation, cjk, style.size, A4[0] - MARGIN * 2)) {
+            if (y < BOTTOM_MARGIN + style.lineHeight) newPage();
+            page.drawText(line, { x: MARGIN, y, size: style.size, font: cjk, color: style.color });
+            y -= style.lineHeight;
+          }
+          y -= style.spacing;
+        }
+        continue;
+      }
+
+      const sourcePage = source.getPage(block.pageNumber - 1);
+      if (!sourcePage) {
+        warnings.push({ code: 'MISSING_PAGE', blockId: block.id });
+        continue;
+      }
+      const [x1, y1, x2, y2] = block.rect;
+      const crop = sourcePage.getCropBox();
+      const bounds = {
+        left: Math.max(crop.x, x1),
+        bottom: Math.max(crop.y, y1),
+        right: Math.min(crop.x + crop.width, x2),
+        top: Math.min(crop.y + crop.height, y2),
+      };
+      if (bounds.right <= bounds.left || bounds.top <= bounds.bottom) {
+        warnings.push({ code: 'INVALID_RECT', blockId: block.id });
+        continue;
+      }
+
+      const next = layoutPage.blocks[blockIndex + 1];
+      const captionHeight = next?.type === 'text' && next.role === 'caption'
+        ? estimateTextBlockHeight(next.translations, cjk, 9, 13, 6)
+        : 0;
+      const fitted = fitVisualBlock(
+        { width: bounds.right - bounds.left, height: bounds.top - bounds.bottom },
+        { maxWidth: A4[0] - MARGIN * 2, maxHeight: 688 - captionHeight },
+      );
+      if (choosePageBreak({ remaining: y - BOTTOM_MARGIN, visualHeight: fitted.height, captionHeight })) newPage();
+      try {
+        const embedded = await output.embedPage(sourcePage, bounds);
+        page.drawPage(embedded, {
+          x: MARGIN + (A4[0] - MARGIN * 2 - fitted.width) / 2,
+          y: y - fitted.height,
+          width: fitted.width,
+          height: fitted.height,
+        });
+        y -= fitted.height + 12;
+      } catch {
+        warnings.push({ code: 'CROP_FAILED', blockId: block.id });
+      }
+    }
+  }
+
+  return { bytes: await output.save(), warnings };
+}
+
+function textStyle(role: 'heading' | 'paragraph' | 'list' | 'caption' | 'note') {
+  if (role === 'heading') return { size: 14, lineHeight: 20, spacing: 10, color: rgb(0, 0.22, 0.4) };
+  if (role === 'caption') return { size: 9, lineHeight: 13, spacing: 10, color: rgb(0.28, 0.28, 0.28) };
+  if (role === 'note') return { size: 9, lineHeight: 13, spacing: 8, color: rgb(0.3, 0.3, 0.3) };
+  return { size: BODY_SIZE, lineHeight: LINE_HEIGHT, spacing: 10, color: rgb(0.08, 0.18, 0.28) };
+}
+
+function estimateTextBlockHeight(
+  translations: string[],
+  font: PDFFont,
+  size: number,
+  lineHeight: number,
+  spacing: number,
+): number {
+  return translations.reduce(
+    (height, text) => height + wrapText(text, font, size, A4[0] - MARGIN * 2).length * lineHeight + spacing,
+    0,
+  );
 }
 
 export async function renderBilingualPdf(input: RenderInput): Promise<Uint8Array> {

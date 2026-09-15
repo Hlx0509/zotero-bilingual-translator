@@ -16,7 +16,7 @@ export interface LayoutVisualBlock {
   pageNumber: number;
   rect: [number, number, number, number];
 }
-export interface LayoutWarning { code: 'INVALID_RECT' | 'MISSING_PAGE'; blockId: string }
+export interface LayoutWarning { code: 'INVALID_RECT' | 'MISSING_PAGE' | 'CROP_FAILED'; blockId: string }
 
 const TEXT_ROLES: Record<string, LayoutTextBlock['role']> = {
   heading: 'heading',

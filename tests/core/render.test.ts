@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { readFile } from 'node:fs/promises';
-import { PDFDocument } from 'pdf-lib';
-import { renderBilingualPdf } from '../../src/core/render.js';
+import { PDFDict, PDFDocument, PDFName, rgb } from 'pdf-lib';
+import { renderBilingualPdf, renderStructuredBilingualPdf } from '../../src/core/render.js';
 
 async function createSourcePdf(): Promise<Uint8Array> {
   const source = await PDFDocument.create();
@@ -54,5 +54,47 @@ describe('renderBilingualPdf', () => {
     });
 
     expect((await PDFDocument.load(bytes)).getPageCount()).toBeGreaterThan(2);
+  });
+});
+
+describe('renderStructuredBilingualPdf', () => {
+  it('copies the source page and embeds a clipped visual into its companion page', async () => {
+    const source = await PDFDocument.create();
+    const sourcePage = source.addPage([300, 400]);
+    sourcePage.drawRectangle({ x: 40, y: 100, width: 180, height: 120, color: rgb(1, 0, 0) });
+
+    const result = await renderStructuredBilingualPdf({
+      title: 'Paper',
+      sourcePdfBytes: await source.save(),
+      cjkFontBytes: await readFile('C:/Windows/Fonts/NotoSansSC-VF.ttf'),
+      warnings: [],
+      pages: [{ pageNumber: 1, blocks: [
+        { id: 'p1', type: 'text', role: 'paragraph', sourceText: 'Body', translations: ['正文译文'] },
+        { id: 'img1', type: 'visual', role: 'image', pageNumber: 1, rect: [40, 100, 220, 220] },
+        { id: 'cap1', type: 'text', role: 'caption', sourceText: 'Figure', translations: ['图一'] },
+      ] }],
+    });
+
+    const output = await PDFDocument.load(result.bytes);
+    expect(output.getPageCount()).toBe(2);
+    expect(output.getPage(0).getSize()).toEqual({ width: 300, height: 400 });
+    const resources = output.getPage(1).node.Resources();
+    const xObjects = resources?.lookup(PDFName.of('XObject'), PDFDict);
+    expect(xObjects?.keys().length).toBeGreaterThan(0);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('does not create a companion page for a structurally blank source page', async () => {
+    const source = await PDFDocument.create();
+    source.addPage([300, 400]);
+    const result = await renderStructuredBilingualPdf({
+      title: 'Blank',
+      sourcePdfBytes: await source.save(),
+      cjkFontBytes: await readFile('C:/Windows/Fonts/NotoSansSC-VF.ttf'),
+      warnings: [],
+      pages: [{ pageNumber: 1, blocks: [] }],
+    });
+
+    expect((await PDFDocument.load(result.bytes)).getPageCount()).toBe(1);
   });
 });
