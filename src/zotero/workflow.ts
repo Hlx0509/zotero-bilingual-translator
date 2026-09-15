@@ -25,6 +25,7 @@ export interface WorkflowInput {
   api: WorkflowAPI;
   settings: TranslationSettings;
   signal: AbortSignal;
+  onProgress?: (event: { phase: 'extracting' | 'translating' | 'rendering' | 'saving' | 'complete' }) => void;
   translate(input: { chunks: ReturnType<typeof chunkParagraphs> }): Promise<TranslatedDocument>;
   render(input: TranslatedDocument & { title: string; cjkFontBytes: Uint8Array }): Promise<Uint8Array>;
 }
@@ -32,14 +33,19 @@ export interface WorkflowInput {
 export async function generateBilingualAttachment(input: WorkflowInput): Promise<string> {
   const attachment = await input.api.getAttachment(input.attachmentID);
   assertTranslatableAttachment(attachment);
+  input.onProgress?.({ phase: 'extracting' });
   const paragraphs = normalizeParagraphs(await input.api.extractText(attachment.id));
   if (!paragraphs.length) throw new Error('此 PDF 没有可提取的文字；扫描件暂不支持。');
 
+  input.onProgress?.({ phase: 'translating' });
   const translated = await input.translate({ chunks: chunkParagraphs(paragraphs, input.settings.maxChunkCharacters) });
   if (input.signal.aborted) throw new Error('翻译已取消。');
+  input.onProgress?.({ phase: 'rendering' });
   const bytes = await input.render({ ...translated, title: attachment.title, cjkFontBytes: await input.api.readFont() });
   const outputPath = await uniqueOutputPath(attachment.path, input.api.exists);
+  input.onProgress?.({ phase: 'saving' });
   await input.api.writeAtomically(outputPath, bytes);
   await input.api.linkAttachment({ parentItemID: attachment.parentID, path: outputPath, title: `双语译文：${attachment.title}` });
+  input.onProgress?.({ phase: 'complete' });
   return outputPath;
 }

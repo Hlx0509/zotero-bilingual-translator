@@ -19,7 +19,13 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
   const { AbortController } = Zotero.getMainWindow();
   const controller = new AbortController();
   const client = new DeepSeekClient({ apiKey: settings.apiKey, model: settings.model });
-  return generateBilingualAttachment({
+  const progress = new Zotero.ProgressWindow({ window: Zotero.getMainWindow(), closeOnClick: false });
+  progress.changeHeadline('生成中英双语 PDF');
+  const indicator = new progress.ItemProgress('attachment', '准备中');
+  indicator.setProgress(0);
+  progress.show();
+  try {
+    const output = await generateBilingualAttachment({
     attachmentID,
     settings,
     signal: controller.signal,
@@ -50,10 +56,35 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
       },
     },
     translate: ({ chunks }) => translateDocument({
-      fingerprint: String(attachmentID), chunks, settings, signal: controller.signal, client, cache: memoryCache, onProgress: () => {},
+      fingerprint: String(attachmentID), chunks, settings, signal: controller.signal, client, cache: memoryCache,
+      onProgress: ({ completedChunks, totalChunks }) => {
+        indicator.setText(`翻译 ${completedChunks} / ${totalChunks} 段`);
+        indicator.setProgress(Math.round((completedChunks / totalChunks) * 100));
+      },
     }),
     render: renderBilingualPdf,
+    onProgress: ({ phase }) => {
+      const labels = {
+        extracting: '正在提取 PDF 文本',
+        translating: '正在翻译文本',
+        rendering: '正在生成双语 PDF',
+        saving: '正在保存并添加附件',
+        complete: '已完成',
+      };
+      indicator.setText(labels[phase]);
+      if (phase !== 'translating') indicator.setProgress(phase === 'complete' ? 100 : 0);
+    },
   });
+    indicator.setText('已完成');
+    indicator.setProgress(100);
+    progress.startCloseTimer(3000);
+    return output;
+  } catch (error) {
+    indicator.setText(error instanceof Error ? error.message : '生成失败。');
+    indicator.setError();
+    progress.startCloseTimer(8000);
+    throw error;
+  }
 }
 
 function readSettings(): TranslationSettings {

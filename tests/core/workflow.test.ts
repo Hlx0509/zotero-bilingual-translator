@@ -13,11 +13,13 @@ describe('generateBilingualAttachment', () => {
     };
     const translate = vi.fn().mockResolvedValue({ chunks: [{ id: '0', paragraphs: ['First paragraph.', 'Second paragraph.'], source: 'First paragraph.\n\nSecond paragraph.', translations: ['第一段。', '第二段。'] }] });
     const render = vi.fn().mockResolvedValue(new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+    const progress: string[] = [];
 
-    const output = await generateBilingualAttachment({ attachmentID: 7, api, translate, render, settings: { apiKey: 'k', model: 'deepseek-chat', targetLanguage: 'zh-CN', maxChunkCharacters: 6000 }, signal: new AbortController().signal });
+    const output = await generateBilingualAttachment({ attachmentID: 7, api, translate, render, settings: { apiKey: 'k', model: 'deepseek-chat', targetLanguage: 'zh-CN', maxChunkCharacters: 6000 }, signal: new AbortController().signal, onProgress: (event) => progress.push(event.phase) });
 
     expect(output).toBe('C:/papers/a.bilingual-zh-CN.pdf');
     expect(api.writeAtomically).toHaveBeenCalledWith(output, new Uint8Array([0x25, 0x50, 0x44, 0x46]));
     expect(api.linkAttachment).toHaveBeenCalledWith({ parentItemID: 3, path: output, title: '双语译文：A' });
+    expect(progress).toEqual(['extracting', 'translating', 'rendering', 'saving', 'complete']);
   });
 });
