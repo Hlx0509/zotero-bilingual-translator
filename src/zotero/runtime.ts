@@ -1,5 +1,8 @@
 import { DeepSeekClient } from '../core/deepseek.js';
-import { renderBilingualPdf } from '../core/render.js';
+import { buildLayoutDocument } from '../core/layout.js';
+import { translateLayout } from '../core/layout-translation.js';
+import { renderBilingualPdf, renderStructuredBilingualPdf } from '../core/render.js';
+import { decodeSDTPack } from '../core/sdt-pack.js';
 import type { TranslationCache } from '../core/orchestrator.js';
 import { translatePages } from '../core/page-translation.js';
 import type { TranslationSettings } from '../core/types.js';
@@ -26,7 +29,7 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
   indicator.setProgress(0);
   progress.show();
   try {
-    const output = await generateBilingualAttachment({
+    const result = await generateBilingualAttachment({
     attachmentID,
     settings,
     signal: controller.signal,
@@ -36,6 +39,17 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         const path = await item.getFilePathAsync();
         if (!path) throw new Error('找不到 PDF 附件文件。');
         return { id, parentID: item.parentID, contentType: item.attachmentContentType, path, title: item.getDisplayTitle() };
+      },
+      async extractLayout(id) {
+        const extracted = await Zotero.PDFWorker.getStructuredDocumentText(id, {
+          isPriority: true,
+          onProgress: (event: unknown) => {
+            const raw = typeof event === 'number' ? event : Number((event as { progress?: unknown })?.progress);
+            if (Number.isFinite(raw)) indicator.setProgress(Math.round(Math.max(0, Math.min(100, raw)) * 0.15));
+          },
+        });
+        if (!extracted?.buf) throw new Error('Zotero 未返回结构化版面数据。');
+        return buildLayoutDocument(decodeSDTPack(new Uint8Array(extracted.buf)));
       },
       async extractPageText(id) {
         const extracted = await Zotero.PDFWorker.getFullText(id, null, true);
@@ -64,33 +78,51 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         await Zotero.Attachments.linkFromFile({ parentItemID, file: path, title, contentType: 'application/pdf' });
       },
     },
+    translateStructured: ({ layout }) => translateLayout({
+      documentFingerprint: String(attachmentID), layout, settings, signal: controller.signal, client, cache: memoryCache,
+      onProgress: ({ pageNumber, totalPages, completedTextBlocks, totalTextBlocks }) => {
+        indicator.setText(`正在翻译第 ${pageNumber} / ${totalPages} 页（文本块 ${completedTextBlocks} / ${totalTextBlocks}）`);
+        const fraction = totalTextBlocks ? completedTextBlocks / totalTextBlocks : 1;
+        indicator.setProgress(Math.round(15 + fraction * 60));
+      },
+    }),
+    renderStructured: renderStructuredBilingualPdf,
     translate: ({ pages }) => translatePages({
       fingerprint: String(attachmentID), pages, settings, signal: controller.signal, client, cache: memoryCache,
       onProgress: ({ pageNumber, totalPages, completedChunks, totalChunks }) => {
         const detail = totalChunks ? `${completedChunks} / ${totalChunks} 段` : '无可翻译文本';
         indicator.setText(`正在翻译第 ${pageNumber} / ${totalPages} 页（${detail}）`);
         const pageFraction = totalChunks ? completedChunks / totalChunks : 1;
-        indicator.setProgress(Math.round(10 + ((pageNumber - 1 + pageFraction) / totalPages) * 75));
+        indicator.setProgress(Math.round(15 + ((pageNumber - 1 + pageFraction) / totalPages) * 60));
       },
     }),
     render: renderBilingualPdf,
+    onFallback: (error) => {
+      Zotero.debug(`Bilingual Translator: structured layout unavailable, using text fallback: ${String(error)}`, 2);
+    },
     onProgress: ({ phase }) => {
       const labels = {
-        extracting: '正在提取 PDF 分页文本',
+        analyzing: '正在分析 PDF 版面',
+        extracting: '正在提取 PDF 分页文本（回退模式）',
         translating: '正在翻译文本',
+        visuals: '正在提取并放置图片、公式和表格',
         merging: '正在合并原文页与译文页',
         saving: '正在保存并添加附件',
         complete: '已完成',
       };
       indicator.setText(labels[phase]);
-      const percentages = { extracting: 5, translating: 10, merging: 90, saving: 96, complete: 100 };
+      const percentages = { analyzing: 0, extracting: 15, translating: 15, visuals: 75, merging: 75, saving: 92, complete: 100 };
       indicator.setProgress(percentages[phase]);
     },
   });
-    indicator.setText('已完成');
+    indicator.setText(result.mode === 'text-fallback'
+      ? '已完成（已回退为纯文本译文）'
+      : result.warnings.length
+        ? `已完成，但有 ${result.warnings.length} 个元素未能放置`
+        : '已完成（含图片、公式和表格）');
     indicator.setProgress(100);
     progress.startCloseTimer(3000);
-    return output;
+    return result.outputPath;
   } catch (error) {
     indicator.setText(error instanceof Error ? error.message : '生成失败。');
     indicator.setError();
