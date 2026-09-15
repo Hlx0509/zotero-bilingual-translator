@@ -16,6 +16,7 @@ const memoryCache: TranslationCache = {
 export async function translateSelectedAttachment(rootURI: string, attachmentID: number): Promise<string> {
   const settings = readSettings();
   if (!settings.apiKey.trim()) throw new Error('请先在 Zotero 设置中填写 DeepSeek API Key。');
+  const { AbortController } = Zotero.getMainWindow();
   const controller = new AbortController();
   const client = new DeepSeekClient({ apiKey: settings.apiKey, model: settings.model });
   return generateBilingualAttachment({
