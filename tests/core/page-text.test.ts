@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { splitTextByPageChars } from '../../src/core/page-text.js';
 
 describe('splitTextByPageChars', () => {
+  it('splits Zotero 10 form-feed boundaries and restores trailing empty pages', () => {
+    expect(splitTextByPageChars({ text: 'Page 1\fPage 2', totalPages: 3 })).toEqual([
+      { pageNumber: 1, text: 'Page 1' },
+      { pageNumber: 2, text: 'Page 2' },
+      { pageNumber: 3, text: '' },
+    ]);
+  });
+
   it('keeps page boundaries and empty pages from PDF Worker metadata', () => {
     expect(splitTextByPageChars({ text: 'Page 1Page 3', pageChars: [6, 0, 6] })).toEqual([
       { pageNumber: 1, text: 'Page 1' },

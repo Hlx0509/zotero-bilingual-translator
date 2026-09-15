@@ -42,6 +42,8 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         return {
           text: extracted?.text ?? '',
           pageChars: Array.isArray(extracted?.pageChars) ? extracted.pageChars : undefined,
+          extractedPages: Number.isInteger(extracted?.extractedPages) ? extracted.extractedPages : undefined,
+          totalPages: Number.isInteger(extracted?.totalPages) ? extracted.totalPages : undefined,
         };
       },
       async readSourcePdf(path) {
