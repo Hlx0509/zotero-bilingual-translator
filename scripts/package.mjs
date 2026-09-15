@@ -1,12 +1,14 @@
 import archiver from 'archiver';
 import { createWriteStream } from 'node:fs';
-import { mkdir, rm, copyFile } from 'node:fs/promises';
+import { mkdir, rm, copyFile, readFile } from 'node:fs/promises';
 
 await import('../esbuild.mjs');
+const manifest = JSON.parse(await readFile('manifest.json', 'utf8'));
+const filename = `zotero-bilingual-translator-${manifest.version}.xpi`;
 await mkdir('dist', { recursive: true });
-await rm('dist/zotero-bilingual-translator-0.1.6.xpi', { force: true });
+await rm(`dist/${filename}`, { force: true });
 await new Promise((resolve, reject) => {
-  const output = createWriteStream('dist/zotero-bilingual-translator-0.1.6.xpi');
+  const output = createWriteStream(`dist/${filename}`);
   const archive = archiver('zip', { zlib: { level: 9 } });
   output.on('close', resolve);
   archive.on('error', reject);
@@ -19,4 +21,4 @@ await new Promise((resolve, reject) => {
   archive.finalize();
 });
 await mkdir('../outputs', { recursive: true });
-await copyFile('dist/zotero-bilingual-translator-0.1.6.xpi', '../outputs/zotero-bilingual-translator-0.1.6.xpi');
+await copyFile(`dist/${filename}`, `../outputs/${filename}`);
