@@ -1,12 +1,12 @@
 {
   "manifest_version": 2,
   "name": "Zotero Bilingual Translator",
-  "version": "0.3.0",
+  "version": "1.0.0",
   "description": "Preserve original pages and reflow Chinese translations with source images, formulas, and tables.",
   "applications": {
     "zotero": {
       "id": "bilingual-translator@example.com",
-      "update_url": "https://example.com/zotero-bilingual-translator/updates.json",
+      "update_url": "https://raw.githubusercontent.com/Hlx0509/zotero-bilingual-translator/main/updates.json",
       "strict_min_version": "7.9.9",
       "strict_max_version": "10.9.9"
     }
