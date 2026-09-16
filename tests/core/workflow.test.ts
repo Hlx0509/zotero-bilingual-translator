@@ -32,6 +32,11 @@ describe('generateBilingualAttachment', () => {
       ...translatedLayout, title: 'A', sourcePdfBytes, cjkFontBytes: fontBytes,
     });
     expect(api.writeAtomically).toHaveBeenCalledWith(result.outputPath, pdfBytes);
+    expect(api.importAttachment).toHaveBeenCalledWith({
+      parentItemID: attachment.parentID,
+      path: result.outputPath,
+      title: `双语译文：${attachment.title}`,
+    });
   });
 
   it('falls back to page text only when structured extraction fails', async () => {
@@ -74,6 +79,6 @@ function makeAPI() {
     readFont: vi.fn().mockResolvedValue(fontBytes),
     exists: vi.fn().mockResolvedValue(false),
     writeAtomically: vi.fn().mockResolvedValue(undefined),
-    linkAttachment: vi.fn().mockResolvedValue(undefined),
+    importAttachment: vi.fn().mockResolvedValue(undefined),
   };
 }

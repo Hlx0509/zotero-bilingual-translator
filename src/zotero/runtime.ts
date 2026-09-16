@@ -74,8 +74,8 @@ export async function translateSelectedAttachment(rootURI: string, attachmentID:
         await IOUtils.write(temporaryPath, bytes);
         await IOUtils.move(temporaryPath, path, { noOverwrite: true });
       },
-      async linkAttachment({ parentItemID, path, title }) {
-        await Zotero.Attachments.linkFromFile({ parentItemID, file: path, title, contentType: 'application/pdf' });
+      async importAttachment({ parentItemID, path, title }) {
+        await Zotero.Attachments.importFromFile({ parentItemID, file: path, title, contentType: 'application/pdf' });
       },
     },
     translateStructured: ({ layout }) => translateLayout({

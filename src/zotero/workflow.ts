@@ -23,7 +23,7 @@ export interface WorkflowAPI {
   readFont(): Promise<Uint8Array>;
   exists(path: string): Promise<boolean>;
   writeAtomically(path: string, bytes: Uint8Array): Promise<void>;
-  linkAttachment(input: { parentItemID: number; path: string; title: string }): Promise<void>;
+  importAttachment(input: { parentItemID: number; path: string; title: string }): Promise<void>;
 }
 
 export interface WorkflowInput {
@@ -91,7 +91,7 @@ export async function generateBilingualAttachment(input: WorkflowInput): Promise
   const outputPath = await uniqueOutputPath(attachment.path, input.api.exists);
   input.onProgress?.({ phase: 'saving' });
   await input.api.writeAtomically(outputPath, bytes);
-  await input.api.linkAttachment({ parentItemID: attachment.parentID, path: outputPath, title: `双语译文：${attachment.title}` });
+  await input.api.importAttachment({ parentItemID: attachment.parentID, path: outputPath, title: `双语译文：${attachment.title}` });
   input.onProgress?.({ phase: 'complete' });
   return { outputPath, mode, warnings };
 }

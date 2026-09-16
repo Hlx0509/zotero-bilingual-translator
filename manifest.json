@@ -1,7 +1,7 @@
 {
   "manifest_version": 2,
   "name": "Zotero Bilingual Translator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Preserve original pages and reflow Chinese translations with source images, formulas, and tables.",
   "applications": {
     "zotero": {
